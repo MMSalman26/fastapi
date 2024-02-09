@@ -19,7 +19,7 @@ async def read_item():
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
     
-    return {"items": item}
+    return {"item": item}
 
 @app.get("/items/{itemid1}/{itemid2}")
 async def read_item(itemid1 : int, itemid2 : int):
