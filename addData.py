@@ -14,7 +14,7 @@ cursor.execute('''
 ''')
 conn.commit()
 
-student_names = ["Alice", "Bob", "Charlie", "David", "Emma", "Frank", "Grace", "Henry", "Ivy", "Jack"]
+student_names = ["zidan", "Bob", "Charlie", "David", "Emma", "Frank", "Grace", "Henry", "Ivy", "Jack"]
 
 for i in range(10):
     name = random.choice(student_names)
