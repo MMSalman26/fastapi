@@ -47,6 +47,10 @@ async def read_item(itemid1 : str = None, itemid2 : str = None):
     
     return {"items": value}
 
+@app.get("/items/helloSamurai")
+async def say_hello():
+    return {"Grettings": "Hello Code Samurai 2024"}
+
 
 
 
