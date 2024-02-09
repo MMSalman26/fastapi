@@ -1,78 +1,113 @@
 from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, conlist
 import sqlite3
 
-conn = sqlite3.connect('database.db')
+conn = sqlite3.connect('test.db')  # Updated to use test.db
 cursor = conn.cursor()
 
-# cursor.execute('''
-#     CREATE TABLE IF NOT EXISTS items (
-#         id INTEGER PRIMARY KEY AUTOINCREMENT,
-#         name TEXT NOT NULL,
-#         description TEXT
-#     )
-# ''')
-# conn.commit()
+# Ensure the database table for users exists
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        user_name TEXT NOT NULL,
+        balance INTEGER
+    )
+''')
+conn.commit()
 
 app = FastAPI()
 
-class Item(BaseModel):
-    name: str
-    description: str = None
+class User(BaseModel):
+    user_id: int
+    user_name: str
+    balance: int
 
-@app.get("/items")
-async def read_item():
-    cursor.execute("SELECT * FROM items")
-    item = cursor.fetchall()
-
-    if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
-    
-    return {"items": item}
-
-@app.get("/items/{itemid1}/{itemid2}")
-async def read_item(itemid1 : int, itemid2 : int):
-    cursor.execute("SELECT * FROM items")
-    item = cursor.fetchone()
-
-    if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
-    
-    return {"items": itemid1 + itemid2}
-
-@app.get("/items/")
-async def read_item(itemid1 : str = None, itemid2 : str = None):
-    cursor.execute("SELECT * FROM items")
-    item = cursor.fetchone()
-    value = ""
-    if itemid1 :
-        value = itemid1
-    if itemid2 : 
-        value = itemid2 
-    if itemid1 and itemid2 : 
-        value = itemid1 + itemid2
-    if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
-    
-    return {"items": value}
-
-@app.post("/items")
-async def create_item(item: Item):
-    cursor.execute("INSERT INTO items (name, description) VALUES (?, ?)", (item.name, item.description))
+@app.post("/api/users", status_code=status.HTTP_201_CREATED)
+async def create_user(user: User):
+    cursor.execute("INSERT INTO users (user_id, user_name, balance) VALUES (?, ?, ?)", (user.user_id, user.user_name, user.balance))
     conn.commit()
     
-    return {"message": "Item created successfully"}
+    return user.dict()
 
-# @app.put("/items/{item_id}")
-# async def update_item(item_id: int, item: Item):
-#     cursor.execute("UPDATE items SET name=?, description=? WHERE id=?", (item.name, item.description, item_id))
-#     conn.commit()
-    
-#     return {"message": "Item updated successfully"}
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS stations (
+        station_id INTEGER PRIMARY KEY,
+        station_name TEXT NOT NULL,
+        longitude FLOAT,
+        latitude FLOAT
+    )
+''')
+conn.commit()
 
-# @app.delete("/items/{item_id}")
-# async def delete_item(item_id: int):
-#     cursor.execute("DELETE FROM items WHERE id=?", (item_id,))
-#     conn.commit()
+class Station(BaseModel):
+    station_id: int
+    station_name: str
+    longitude: float
+    latitude: float
+
+@app.post("/api/stations", status_code=status.HTTP_201_CREATED)
+async def create_station(station: Station):
+    cursor.execute("INSERT INTO stations (station_id, station_name, longitude, latitude) VALUES (?, ?, ?, ?)",
+                   (station.station_id, station.station_name, station.longitude, station.latitude))
+    conn.commit()
     
-#     return {"message": "Item deleted successfully"}
+    return station.dict()
+
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS trains (
+        train_id INTEGER PRIMARY KEY,
+        train_name TEXT NOT NULL,
+        capacity INTEGER,
+        service_start TEXT,
+        service_ends TEXT,
+        num_stations INTEGER
+    )
+''')
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS train_stops (
+        train_id INTEGER,
+        station_id INTEGER,
+        arrival_time TEXT,
+        departure_time TEXT,
+        fare INTEGER,
+        FOREIGN KEY(train_id) REFERENCES trains(train_id)
+    )
+''')
+
+conn.commit()
+
+class Stop(BaseModel):
+    station_id: int
+    arrival_time: str = None
+    departure_time: str
+    fare: int
+
+class Train(BaseModel):
+    train_id: int
+    train_name: str
+    capacity: int
+    stops: conlist(Stop, min_items=2)
+
+@app.post("/api/trains", status_code=status.HTTP_201_CREATED)
+async def create_train(train: Train):
+    num_stations = len(train.stops)
+    service_start = train.stops[0].departure_time
+    service_ends = train.stops[-1].arrival_time
+
+    train.stops[0].arrival_time = None
+    train.stops[-1].departure_time = None
+    cursor.execute("INSERT INTO trains (train_id, train_name, capacity, service_start, service_ends, num_stations) VALUES (?, ?, ?, ?, ?, ?)",
+                   (train.train_id, train.train_name, train.capacity, service_start, service_ends, num_stations))
+    for stop in train.stops:
+        cursor.execute("INSERT INTO train_stops (train_id, station_id, arrival_time, departure_time, fare) VALUES (?, ?, ?, ?, ?)",
+                       (train.train_id, stop.station_id, stop.arrival_time, stop.departure_time, stop.fare))
+    conn.commit()
+    
+    return {
+        "train_id": train.train_id,
+        "train_name": train.train_name,
+        "capacity": train.capacity,
+        "service_start": service_start,
+        "service_ends": service_ends,
+        "num_stations": num_stations
+    }
